@@ -2,82 +2,73 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Super Snake AI - PRO</title>
+<title>Snake ULTRA AI</title>
 <style>
-body { 
-    margin: 0; overflow: hidden;
-    background: #020617; display: flex;
-    flex-direction: column; align-items: center; justify-content: center;
-    height: 100vh; font-family: sans-serif;
+body{
+    margin:0;
+    background:#020617;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    height:100vh;
+    color:white;
+    font-family:sans-serif;
 }
-#ui { color: white; margin-bottom: 10px; }
-canvas { background: #0f172a; border: 2px solid #1e293b; }
+canvas{background:#0f172a;border:2px solid #1e293b;}
 </style>
 </head>
 <body>
 
-<div id="ui">
-<h2>Skor: <span id="scoreVal">0</span></h2>
-</div>
-
-<canvas id="gameCanvas"></canvas>
+<h2>Skor: <span id="score">0</span></h2>
+<canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById("gameCanvas");
+const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-const scoreVal = document.getElementById("scoreVal");
+const scoreEl = document.getElementById("score");
 
-let gridSize, tileCount;
-let snake, foods, bombs, lastMove, score, gameActive;
+let grid = 30, size;
+let snake, foods, bombs, dir, score;
 
-// 🔊 SOUND SIMPLE (beep)
-function beep(freq=400, time=100){
-    let ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
-    let osc = ctxAudio.createOscillator();
-    let gain = ctxAudio.createGain();
-    osc.connect(gain);
-    gain.connect(ctxAudio.destination);
-    osc.frequency.value = freq;
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctxAudio.currentTime + time/1000);
+function beep(f=400,t=100){
+    let a=new (window.AudioContext||window.webkitAudioContext)();
+    let o=a.createOscillator(),g=a.createGain();
+    o.connect(g);g.connect(a.destination);
+    o.frequency.value=f;o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+t/1000);
 }
 
 function init(){
-    const size = Math.min(window.innerWidth*0.8, window.innerHeight*0.7);
-    canvas.width = size;
-    canvas.height = size;
+    size=Math.min(window.innerWidth*0.8,window.innerHeight*0.7);
+    canvas.width=size;
+    canvas.height=size;
 
-    tileCount = 30;
-    gridSize = canvas.width / tileCount;
+    snake=[{x:5,y:15}];
+    foods=[];
+    bombs=[];
+    dir={x:1,y:0};
+    score=0;
 
-    snake = [{x:5,y:15}];
-    foods = [];
-    bombs = [];
-    lastMove = {x:1,y:0};
-    score = 0;
-    gameActive = true;
-
-    spawnItems('food',1,false);
+    spawn('food',1,false);
 }
 
-function spawnItems(type,count,temp=false){
-    for(let i=0;i<count;i++){
+function spawn(type,n,temp){
+    for(let i=0;i<n;i++){
         let tries=0;
         while(tries<50){
             tries++;
             let item={
-                x:Math.floor(Math.random()*(tileCount-2))+1,
-                y:Math.floor(Math.random()*(tileCount-2))+1,
-                type:type==='food'?'🍎':'💣',
-                createdAt:Date.now(),
-                temporary:temp
+                x:Math.floor(Math.random()*grid),
+                y:Math.floor(Math.random()*grid),
+                t:type,
+                time:Date.now(),
+                temp:temp
             };
-            let occupied =
-                snake.some(p=>p.x===item.x&&p.y===item.y)||
-                foods.some(f=>f.x===item.x&&f.y===item.y)||
-                bombs.some(b=>b.x===item.x&&b.y===item.y);
-
-            if(!occupied){
+            let used=snake.some(s=>s.x===item.x&&s.y===item.y)
+            ||foods.some(f=>f.x===item.x&&f.y===item.y)
+            ||bombs.some(b=>b.x===item.x&&b.y===item.y);
+            if(!used){
                 type==='food'?foods.push(item):bombs.push(item);
                 break;
             }
@@ -85,133 +76,162 @@ function spawnItems(type,count,temp=false){
     }
 }
 
-window.addEventListener('keydown',e=>{
+window.addEventListener("keydown",e=>{
     let k=e.key.toUpperCase();
-    if(k==='A') spawnItems('food',5,true);
-    if(k==='S') spawnItems('food',10,true);
-    if(k==='D') spawnItems('food',20,true);
-    if(k==='Q') spawnItems('bomb',5,true);
-    if(k==='W') spawnItems('bomb',10,true);
-    if(k==='E') spawnItems('bomb',20,true);
+    if(k==='A')spawn('food',5,true);
+    if(k==='S')spawn('food',10,true);
+    if(k==='D')spawn('food',20,true);
+    if(k==='Q')spawn('bomb',5,true);
+    if(k==='W')spawn('bomb',10,true);
+    if(k==='E')spawn('bomb',20,true);
 });
 
-function isCollision(x,y){
-    if(x<0||x>=tileCount||y<0||y>=tileCount) return true;
-    return snake.some(p=>p.x===x&&p.y===y);
+function collision(x,y){
+    if(x<0||y<0||x>=grid||y>=grid) return true;
+    return snake.some(s=>s.x===x&&s.y===y);
 }
 
-// 🧠 AI SUPER AMAN
-function getSmartMove(){
-    const head=snake[0];
-    const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+// 🧠 FLOOD FILL CEK RUANG AMAN
+function floodFill(x,y,limit=200){
+    let visited=new Set();
+    let stack=[[x,y]];
+    let count=0;
 
-    let moves = dirs.map(d=>{
-        let nx=head.x+d.x;
-        let ny=head.y+d.y;
+    while(stack.length && count<limit){
+        let [cx,cy]=stack.pop();
+        let key=cx+','+cy;
+        if(visited.has(key))continue;
+        visited.add(key);
+        count++;
 
-        if(isCollision(nx,ny)) return null;
+        [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
+            let nx=cx+d[0], ny=cy+d[1];
+            if(nx>=0&&ny>=0&&nx<grid&&ny<grid){
+                if(!collision(nx,ny)){
+                    stack.push([nx,ny]);
+                }
+            }
+        });
+    }
+    return count;
+}
 
-        let bombRisk = bombs.some(b=>b.x===nx&&b.y===ny)?1000:0;
+// 🧠 ULTRA AI
+function bestMove(){
+    let head=snake[0];
+    let dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+
+    let moves=[];
+
+    dirs.forEach(d=>{
+        let nx=head.x+d[0];
+        let ny=head.y+d[1];
+
+        if(collision(nx,ny)) return;
+
+        let bomb=bombs.some(b=>b.x===nx&&b.y===ny)?1000:0;
 
         let dist=9999;
         foods.forEach(f=>{
-            let d2=Math.abs(nx-f.x)+Math.abs(ny-f.y);
-            if(d2<dist) dist=d2;
+            let dd=Math.abs(nx-f.x)+Math.abs(ny-f.y);
+            if(dd<dist)dist=dd;
         });
 
-        return {dir:d,score:dist + bombRisk};
-    }).filter(x=>x);
+        let space=floodFill(nx,ny);
+
+        moves.push({
+            d:{x:d[0],y:d[1]},
+            score:dist + bomb - space
+        });
+    });
 
     moves.sort((a,b)=>a.score-b.score);
 
-    return moves.length?moves[0].dir:lastMove;
+    return moves.length?moves[0].d:dir;
 }
 
 function draw(){
-    if(!gameActive) return;
-
     let now=Date.now();
 
-    // ⏱️ 15 detik + blink
-    foods=foods.filter(f=>!f.temporary||now-f.createdAt<15000);
-    bombs=bombs.filter(b=>!b.temporary||now-b.createdAt<15000);
+    foods=foods.filter(f=>!f.temp||now-f.time<15000);
+    bombs=bombs.filter(b=>!b.temp||now-b.time<15000);
 
     ctx.fillStyle="#0f172a";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    ctx.font=`${gridSize*0.7}px serif`;
+    let g=canvas.width/grid;
+
+    ctx.font=g*0.7+"px serif";
     ctx.textAlign="center";
     ctx.textBaseline="middle";
 
-    // 🍎 draw blink
     foods.forEach(f=>{
-        let age=now-f.createdAt;
-        if(f.temporary && age>12000){
-            if(Math.floor(age/200)%2===0) return;
+        let age=now-f.time;
+        if(f.temp && age>12000){
+            if(Math.floor(age/200)%2===0)return;
         }
-        ctx.fillText(f.type,f.x*gridSize+gridSize/2,f.y*gridSize+gridSize/2);
+        ctx.fillText("🍎",f.x*g+g/2,f.y*g+g/2);
     });
 
     bombs.forEach(b=>{
-        let age=now-b.createdAt;
-        if(b.temporary && age>12000){
-            if(Math.floor(age/200)%2===0) return;
+        let age=now-b.time;
+        if(b.temp && age>12000){
+            if(Math.floor(age/200)%2===0)return;
         }
-        ctx.fillText(b.type,b.x*gridSize+gridSize/2,b.y*gridSize+gridSize/2);
+        ctx.fillText("💣",b.x*g+g/2,b.y*g+g/2);
     });
 
-    // 🐍 snake
     ctx.strokeStyle="#22c55e";
-    ctx.lineWidth=gridSize-4;
+    ctx.lineWidth=g-4;
     ctx.beginPath();
-    ctx.moveTo(snake[0].x*gridSize+gridSize/2,snake[0].y*gridSize+gridSize/2);
+    ctx.moveTo(snake[0].x*g+g/2,snake[0].y*g+g/2);
     for(let i=1;i<snake.length;i++){
-        ctx.lineTo(snake[i].x*gridSize+gridSize/2,snake[i].y*gridSize+gridSize/2);
+        ctx.lineTo(snake[i].x*g+g/2,snake[i].y*g+g/2);
     }
     ctx.stroke();
 
     let h=snake[0];
     ctx.fillStyle="#4ade80";
     ctx.beginPath();
-    ctx.arc(h.x*gridSize+gridSize/2,h.y*gridSize+gridSize/2,gridSize/2*0.8,0,Math.PI*2);
+    ctx.arc(h.x*g+g/2,h.y*g+g/2,g/2*0.8,0,Math.PI*2);
     ctx.fill();
 
-    // move
-    let move=getSmartMove();
-    lastMove=move;
+    let m=bestMove();
+    dir=m;
 
-    let newHead={x:h.x+move.x,y:h.y+move.y};
+    let nx=h.x+dir.x;
+    let ny=h.y+dir.y;
 
-    if(isCollision(newHead.x,newHead.y)){
+    if(collision(nx,ny)){
         beep(100,200);
-        init(); // auto restart
+        init();
         return;
     }
 
-    snake.unshift(newHead);
+    snake.unshift({x:nx,y:ny});
 
-    let bIndex=bombs.findIndex(b=>b.x===newHead.x&&b.y===newHead.y);
-    if(bIndex!==-1){
-        bombs.splice(bIndex,1);
+    let bi=bombs.findIndex(b=>b.x===nx&&b.y===ny);
+    if(bi!=-1){
+        bombs.splice(bi,1);
         score-=50;
         if(score<0)score=0;
         beep(150,150);
     }
 
-    let fIndex=foods.findIndex(f=>f.x===newHead.x&&f.y===newHead.y);
-    if(fIndex!==-1){
-        foods.splice(fIndex,1);
+    let fi=foods.findIndex(f=>f.x===nx&&f.y===ny);
+    if(fi!=-1){
+        foods.splice(fi,1);
         score+=10;
         beep(600,100);
     }else{
         snake.pop();
     }
 
-    if(foods.length===0) spawnItems('food',1,false);
+    if(foods.length===0) spawn('food',1,false);
 
-    scoreVal.innerText=score;
+    scoreEl.innerText=score;
 
-    setTimeout(()=>requestAnimationFrame(draw),60);
+    setTimeout(()=>requestAnimationFrame(draw),50);
 }
 
 init();
