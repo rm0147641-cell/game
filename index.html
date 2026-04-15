@@ -1,29 +1,24 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <title>Super Snake AI - Square Center Edition</title>
-    <style>
-        body { 
-            margin: 0; padding: 0; overflow: hidden; 
-            background: #020617; font-family: 'Segoe UI', sans-serif;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            height: 100vh;
-        }
-        #ui { text-align: center; color: white; margin-bottom: 15px; }
-        .score-box { font-size: 32px; font-weight: bold; color: #22c55e; }
-
-        canvas { 
-            display: block; 
-            background: #0f172a; 
-            border: 2px solid #1e293b;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Super Snake Fixed</title>
+<style>
+body { 
+    margin: 0; padding: 0; overflow: hidden; 
+    background: #020617; font-family: 'Segoe UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100vh;
+}
+#ui { text-align: center; color: white; margin-bottom: 15px; }
+.score-box { font-size: 32px; font-weight: bold; color: #22c55e; }
+canvas { background: #0f172a; border: 2px solid #1e293b; }
+</style>
 </head>
 <body>
 
 <div id="ui">
-    <div class="score-box">Skor: <span id="scoreVal">0</span> / 10000</div>
+<div class="score-box">Skor: <span id="scoreVal">0</span></div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -39,6 +34,7 @@ let foods = [];
 let bombs = []; 
 let lastMove = {x: 1, y: 0}; 
 let score = 0;
+let gameActive = true;
 
 function init() {
     const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.7);
@@ -57,46 +53,39 @@ function init() {
     spawnItems('food', 1);
 }
 
-function resetSnakeOnly() {
-    snake = [{x: 5, y: Math.floor(tileCount/2)}];
-}
-
-function spawnItems(type, count, isTemporary = false) {
+function spawnItems(type, count, temp = false) {
     for(let i = 0; i < count; i++) {
-        let newItem = {
+        let item = {
             x: Math.floor(Math.random() * (tileCount - 2)) + 1,
             y: Math.floor(Math.random() * (tileCount - 2)) + 1,
             type: type === 'food' ? '🍎' : '💣',
             createdAt: Date.now(),
-            temporary: isTemporary
+            temporary: temp
         };
-        
-        const occupied = snake.some(p => p.x === newItem.x && p.y === newItem.y) ||
-                         bombs.some(b => b.x === newItem.x && b.y === newItem.y) ||
-                         foods.some(f => f.x === newItem.x && f.y === newItem.y);
+
+        const occupied =
+            snake.some(p => p.x === item.x && p.y === item.y) ||
+            foods.some(f => f.x === item.x && f.y === item.y) ||
+            bombs.some(b => b.x === item.x && b.y === item.y);
 
         if (!occupied) {
-            if (type === 'food') foods.push(newItem);
-            else bombs.push(newItem);
-        } else {
-            i--;
-        }
+            if (type === 'food') foods.push(item);
+            else bombs.push(item);
+        } else i--;
     }
 }
 
-window.addEventListener('keydown', (e) => {
-    const key = e.key.toUpperCase();
+window.addEventListener('keydown', e => {
+    const k = e.key.toUpperCase();
 
-    if (key === 'A') spawnItems('food', 5, true);
-    if (key === 'S') spawnItems('food', 10, true);
-    if (key === 'D') spawnItems('food', 20, true);
+    if (k === 'A') spawnItems('food', 5, true);
+    if (k === 'S') spawnItems('food', 10, true);
+    if (k === 'D') spawnItems('food', 20, true);
 
-    if (key === 'Q') spawnItems('bomb', 5, true);
-    if (key === 'W') spawnItems('bomb', 10, true);
-    if (key === 'E') spawnItems('bomb', 20, true);
+    if (k === 'Q') spawnItems('bomb', 5, true);
+    if (k === 'W') spawnItems('bomb', 10, true);
+    if (k === 'E') spawnItems('bomb', 20, true);
 });
-
-window.addEventListener('resize', init);
 
 function isCollision(x, y) {
     if (x < 0 || x >= tileCount || y < 0 || y >= tileCount) return true;
@@ -105,62 +94,78 @@ function isCollision(x, y) {
 
 function getSmartMove() {
     const head = snake[0];
-    const choices = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+    const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
 
-    if (foods.length === 0) return choices[0];
+    if (foods.length === 0) return dirs[0];
 
     let target = foods[0];
     let min = Infinity;
-    foods.forEach(f=>{
+
+    foods.forEach(f => {
         let d = Math.abs(head.x-f.x)+Math.abs(head.y-f.y);
-        if(d<min){min=d;target=f;}
+        if (d < min) { min = d; target = f; }
     });
 
-    return choices.find(m=>{
-        let nx=head.x+m.x, ny=head.y+m.y;
-        return !isCollision(nx,ny) && !bombs.some(b=>b.x===nx&&b.y===ny);
-    }) || choices[0];
+    return dirs.find(d => {
+        let nx = head.x + d.x;
+        let ny = head.y + d.y;
+        return !isCollision(nx, ny);
+    }) || lastMove;
 }
 
 function draw() {
+    if (!gameActive) return;
+
+    // ⏱️ 15 DETIK
     const now = Date.now();
+    foods = foods.filter(f => !f.temporary || now - f.createdAt < 15000);
+    bombs = bombs.filter(b => !b.temporary || now - b.createdAt < 15000);
 
-    // ⏱️ 10 DETIK
-    foods = foods.filter(f => !f.temporary || now - f.createdAt < 10000);
-    bombs = bombs.filter(b => !b.temporary || now - b.createdAt < 10000);
-
-    ctx.fillStyle="#0f172a";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.font = `${gridSize*0.7}px serif`;
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-    foods.forEach(f=>ctx.fillText(f.type,f.x*gridSize+gridSize/2,f.y*gridSize+gridSize/2));
-    bombs.forEach(b=>ctx.fillText(b.type,b.x*gridSize+gridSize/2,b.y*gridSize+gridSize/2));
+    foods.forEach(f => ctx.fillText(f.type, f.x*gridSize+gridSize/2, f.y*gridSize+gridSize/2));
+    bombs.forEach(b => ctx.fillText(b.type, b.x*gridSize+gridSize/2, b.y*gridSize+gridSize/2));
 
-    let move=getSmartMove();
-    let newHead={x:snake[0].x+move.x,y:snake[0].y+move.y};
+    let move = getSmartMove();
+    lastMove = move;
 
-    // ❗ FIX: tidak reset skor
-    if (bombs.some(b => b.x === newHead.x && b.y === newHead.y) || isCollision(newHead.x, newHead.y)) {
-        resetSnakeOnly(); // ⬅️ hanya reset ular
-        return requestAnimationFrame(draw);
+    let newHead = {x: snake[0].x + move.x, y: snake[0].y + move.y};
+
+    // ❌ hanya mati jika tembok / badan
+    if (isCollision(newHead.x, newHead.y)) {
+        gameActive = false;
+        alert("Game Over");
+        return;
     }
 
     snake.unshift(newHead);
 
-    let foodIndex = foods.findIndex(f=>f.x===newHead.x&&f.y===newHead.y);
-    if(foodIndex!==-1){
-        foods.splice(foodIndex,1);
-        score+=10;
-        scoreVal.innerText=score;
-        if(foods.length===0) spawnItems('food',1);
+    // 💣 BOM = -50 poin (tidak reset)
+    let bombIndex = bombs.findIndex(b => b.x === newHead.x && b.y === newHead.y);
+    if (bombIndex !== -1) {
+        bombs.splice(bombIndex, 1);
+        score -= 50;
+        if (score < 0) score = 0;
+    }
+
+    let foodIndex = foods.findIndex(f => f.x === newHead.x && f.y === newHead.y);
+    if (foodIndex !== -1) {
+        foods.splice(foodIndex, 1);
+        score += 10;
     } else {
         snake.pop();
     }
 
-    setTimeout(()=>requestAnimationFrame(draw),50);
+    if (foods.length === 0) spawnItems('food', 1);
+
+    scoreVal.innerText = score;
+
+    setTimeout(() => requestAnimationFrame(draw), 50);
 }
 
 init();
