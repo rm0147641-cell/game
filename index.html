@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Super Snake</title>
+    <title>Game Super Snake</title>
     <style>
         body { 
             margin: 0; padding: 0; overflow: hidden; 
@@ -75,16 +75,17 @@ function init() {
     score = 0;
     scoreVal.innerText = score;
     
-    spawnItems('food', 1);
+    spawnItems('food', 1); // buah permanen
 }
 
-function spawnItems(type, count) {
+function spawnItems(type, count, isTemporary = false) {
     for(let i = 0; i < count; i++) {
         let newItem = {
             x: Math.floor(Math.random() * (tileCount - 2)) + 1,
             y: Math.floor(Math.random() * (tileCount - 2)) + 1,
             type: type === 'food' ? '🍎' : '💣',
-            createdAt: Date.now() // TIMER
+            createdAt: Date.now(),
+            temporary: isTemporary // penanda
         };
         
         const occupied = snake.some(p => p.x === newItem.x && p.y === newItem.y) ||
@@ -102,12 +103,14 @@ function spawnItems(type, count) {
 
 window.addEventListener('keydown', (e) => {
     const key = e.key.toUpperCase();
-    if (key === 'A') spawnItems('food', 5);
-    if (key === 'S') spawnItems('food', 10);
-    if (key === 'D') spawnItems('food', 20);
-    if (key === 'Q') spawnItems('bomb', 5);
-    if (key === 'W') spawnItems('bomb', 10);
-    if (key === 'E') spawnItems('bomb', 20);
+
+    if (key === 'A') spawnItems('food', 5, true);
+    if (key === 'S') spawnItems('food', 10, true);
+    if (key === 'D') spawnItems('food', 20, true);
+
+    if (key === 'Q') spawnItems('bomb', 5, true);
+    if (key === 'W') spawnItems('bomb', 10, true);
+    if (key === 'E') spawnItems('bomb', 20, true);
 });
 
 window.addEventListener('resize', init);
@@ -171,10 +174,10 @@ function getSmartMove() {
 function draw() {
     if (!gameActive) return;
 
-    // ⏱️ HAPUS ITEM > 5 DETIK
+    // hapus hanya item temporary
     const now = Date.now();
-    foods = foods.filter(f => now - f.createdAt < 5000);
-    bombs = bombs.filter(b => now - b.createdAt < 5000);
+    foods = foods.filter(f => !f.temporary || now - f.createdAt < 5000);
+    bombs = bombs.filter(b => !b.temporary || now - b.createdAt < 5000);
 
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -219,7 +222,7 @@ function draw() {
             score += 10;
             scoreVal.innerText = score;
             if (score >= 10000) { gameActive = false; winScreen.style.display = "flex"; }
-            if (foods.length === 0) spawnItems('food', 1);
+            if (foods.length === 0) spawnItems('food', 1); // tetap aman
         } else {
             snake.pop();
         }
