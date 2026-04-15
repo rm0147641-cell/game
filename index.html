@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Super Snake AI - Square Center Edition</title>
+    <title>Super Snake</title>
     <style>
         body { 
             margin: 0; padding: 0; overflow: hidden; 
@@ -10,7 +10,6 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100vh;
         }
-        /* Penempatan UI di atas persegi */
         #ui {
             text-align: center;
             color: white;
@@ -18,9 +17,7 @@
             z-index: 10;
         }
         .score-box { font-size: 32px; font-weight: bold; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
-        .controls-info { font-size: 14px; color: #94a3b8; margin-top: 5px; }
-        
-        /* Canvas dibuat kotak dan memiliki border halus */
+
         canvas { 
             display: block; 
             background: #0f172a; 
@@ -38,199 +35,202 @@
 </head>
 <body>
 
-    <div id="ui">
-        <div class="score-box">Skor: <span id="scoreVal">0</span> / 10000</div>
-    </div>
+<div id="ui">
+    <div class="score-box">Skor: <span id="scoreVal">0</span> / 10000</div>
+</div>
 
-    <canvas id="gameCanvas"></canvas>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="win-screen">
-        <h1 style="font-size: 80px; margin: 0;">🏆 MISSION COMPLETE</h1>
-        <p style="font-size: 24px; color: white;">AI Berhasil Memenuhi Layar!</p>
-        <button onclick="location.reload()" style="padding: 15px 30px; font-size: 20px; cursor: pointer; background: #22c55e; border: none; border-radius: 8px; color: white; font-weight: bold; margin-top: 20px;">Main Lagi</button>
-    </div>
+<div id="win-screen">
+    <h1 style="font-size: 80px; margin: 0;">🏆 MISSION COMPLETE</h1>
+    <p style="font-size: 24px; color: white;">AI Berhasil Memenuhi Layar!</p>
+    <button onclick="location.reload()" style="padding: 15px 30px; font-size: 20px; cursor: pointer; background: #22c55e; border: none; border-radius: 8px; color: white; font-weight: bold; margin-top: 20px;">Main Lagi</button>
+</div>
 
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreVal = document.getElementById("scoreVal");
-        const winScreen = document.getElementById("win-screen");
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreVal = document.getElementById("scoreVal");
+const winScreen = document.getElementById("win-screen");
 
-        let gridSize, tileCount; // tileCount sama untuk X dan Y karena persegi
-        let snake = [];
-        let foods = []; 
-        let bombs = []; 
-        let lastMove = {x: 1, y: 0}; 
-        let score = 0;
-        let gameActive = true;
+let gridSize, tileCount;
+let snake = [];
+let foods = []; 
+let bombs = []; 
+let lastMove = {x: 1, y: 0}; 
+let score = 0;
+let gameActive = true;
 
-        function init() {
-            // Tentukan ukuran terkecil antara lebar dan tinggi layar untuk membuat persegi
-            const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.7);
-            canvas.width = size;
-            canvas.height = size;
+function init() {
+    const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.7);
+    canvas.width = size;
+    canvas.height = size;
 
-            // Tentukan jumlah kotak (misal 30x30)
-            tileCount = 30; 
-            gridSize = canvas.width / tileCount;
-            
-            snake = [{x: 5, y: Math.floor(tileCount/2)}];
-            foods = [];
-            bombs = [];
-            score = 0;
+    tileCount = 30; 
+    gridSize = canvas.width / tileCount;
+    
+    snake = [{x: 5, y: Math.floor(tileCount/2)}];
+    foods = [];
+    bombs = [];
+    score = 0;
+    scoreVal.innerText = score;
+    
+    spawnItems('food', 1);
+}
+
+function spawnItems(type, count) {
+    for(let i = 0; i < count; i++) {
+        let newItem = {
+            x: Math.floor(Math.random() * (tileCount - 2)) + 1,
+            y: Math.floor(Math.random() * (tileCount - 2)) + 1,
+            type: type === 'food' ? '🍎' : '💣',
+            createdAt: Date.now() // TIMER
+        };
+        
+        const occupied = snake.some(p => p.x === newItem.x && p.y === newItem.y) ||
+                         bombs.some(b => b.x === newItem.x && b.y === newItem.y) ||
+                         foods.some(f => f.x === newItem.x && f.y === newItem.y);
+
+        if (!occupied) {
+            if (type === 'food') foods.push(newItem);
+            else bombs.push(newItem);
+        } else {
+            i--;
+        }
+    }
+}
+
+window.addEventListener('keydown', (e) => {
+    const key = e.key.toUpperCase();
+    if (key === 'A') spawnItems('food', 5);
+    if (key === 'S') spawnItems('food', 10);
+    if (key === 'D') spawnItems('food', 20);
+    if (key === 'Q') spawnItems('bomb', 5);
+    if (key === 'W') spawnItems('bomb', 10);
+    if (key === 'E') spawnItems('bomb', 20);
+});
+
+window.addEventListener('resize', init);
+
+function isCollision(x, y) {
+    if (x < 0 || x >= tileCount || y < 0 || y >= tileCount) return true;
+    return snake.some(p => p.x === x && p.y === y);
+}
+
+function countFreeSpace(startX, startY) {
+    let visited = new Set();
+    let queue = [{x: startX, y: startY}];
+    let count = 0;
+    const maxCheck = 200; 
+
+    while(queue.length > 0 && count < maxCheck) {
+        let curr = queue.shift();
+        let key = `${curr.x},${curr.y}`;
+        if (isCollision(curr.x, curr.y) || visited.has(key)) continue;
+        if (bombs.some(b => b.x === curr.x && b.y === curr.y)) continue;
+
+        visited.add(key);
+        count++;
+        queue.push({x: curr.x+1, y: curr.y}, {x: curr.x-1, y: curr.y}, {x: curr.x, y: curr.y+1}, {x: curr.x, y: curr.y-1});
+    }
+    return count;
+}
+
+function getSmartMove() {
+    const head = snake[0];
+    const choices = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+
+    if (foods.length === 0) return choices[0];
+
+    let targetFood = foods[0];
+    let minDist = Infinity;
+    foods.forEach(f => {
+        let d = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
+        if (d < minDist) { minDist = d; targetFood = f; }
+    });
+
+    const evaluatedMoves = choices.map(move => {
+        const nx = head.x + move.x;
+        const ny = head.y + move.y;
+        
+        if (isCollision(nx, ny) || bombs.some(b => b.x === nx && b.y === ny)) return { move, valid: false };
+
+        const dist = Math.abs(nx - targetFood.x) + Math.abs(ny - targetFood.y);
+        const space = countFreeSpace(nx, ny);
+        return { move, dist, space, valid: true };
+    }).filter(m => m.valid);
+
+    evaluatedMoves.sort((a, b) => {
+        if (a.space < snake.length || b.space < snake.length) return b.space - a.space;
+        return a.dist - b.dist;
+    });
+
+    return evaluatedMoves.length > 0 ? evaluatedMoves[0].move : lastMove;
+}
+
+function draw() {
+    if (!gameActive) return;
+
+    // ⏱️ HAPUS ITEM > 5 DETIK
+    const now = Date.now();
+    foods = foods.filter(f => now - f.createdAt < 5000);
+    bombs = bombs.filter(b => now - b.createdAt < 5000);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = `${gridSize * 0.7}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    foods.forEach(f => ctx.fillText(f.type, f.x * gridSize + gridSize/2, f.y * gridSize + gridSize/2));
+    bombs.forEach(b => ctx.fillText(b.type, b.x * gridSize + gridSize/2, b.y * gridSize + gridSize/2));
+
+    if (snake.length > 0) {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = gridSize - 4;
+        ctx.beginPath();
+        ctx.moveTo(snake[0].x * gridSize + gridSize/2, snake[0].y * gridSize + gridSize/2);
+        for(let i = 1; i < snake.length; i++) {
+            ctx.lineTo(snake[i].x * gridSize + gridSize/2, snake[i].y * gridSize + gridSize/2);
+        }
+        ctx.stroke();
+
+        const h = snake[0];
+        ctx.fillStyle = "#4ade80";
+        ctx.beginPath();
+        ctx.arc(h.x * gridSize + gridSize/2, h.y * gridSize + gridSize/2, gridSize/2 * 0.8, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    const move = getSmartMove();
+    lastMove = move;
+    const newHead = {x: snake[0].x + move.x, y: snake[0].y + move.y};
+
+    if (bombs.some(b => b.x === newHead.x && b.y === newHead.y) || isCollision(newHead.x, newHead.y)) {
+        init(); 
+    } else {
+        snake.unshift(newHead);
+        let foodIndex = foods.findIndex(f => f.x === newHead.x && f.y === newHead.y);
+        if (foodIndex !== -1) {
+            foods.splice(foodIndex, 1);
+            score += 10;
             scoreVal.innerText = score;
-            
-            spawnItems('food', 1);
+            if (score >= 10000) { gameActive = false; winScreen.style.display = "flex"; }
+            if (foods.length === 0) spawnItems('food', 1);
+        } else {
+            snake.pop();
         }
+    }
 
-        function spawnItems(type, count) {
-            for(let i = 0; i < count; i++) {
-                let newItem = {
-                    x: Math.floor(Math.random() * (tileCount - 2)) + 1,
-                    y: Math.floor(Math.random() * (tileCount - 2)) + 1,
-                    type: type === 'food' ? '🍎' : '💣'
-                };
-                
-                const occupied = snake.some(p => p.x === newItem.x && p.y === newItem.y) ||
-                                 bombs.some(b => b.x === newItem.x && b.y === newItem.y) ||
-                                 foods.some(f => f.x === newItem.x && f.y === newItem.y);
+    setTimeout(() => requestAnimationFrame(draw), 50);
+}
 
-                if (!occupied) {
-                    if (type === 'food') foods.push(newItem);
-                    else bombs.push(newItem);
-                } else {
-                    i--;
-                }
-            }
-        }
+init();
+draw();
+</script>
 
-        window.addEventListener('keydown', (e) => {
-            const key = e.key.toUpperCase();
-            if (key === 'A') spawnItems('food', 5);
-            if (key === 'S') spawnItems('food', 10);
-            if (key === 'D') spawnItems('food', 20);
-            if (key === 'Q') spawnItems('bomb', 5);
-            if (key === 'W') spawnItems('bomb', 10);
-            if (key === 'E') spawnItems('bomb', 20);
-        });
-
-        window.addEventListener('resize', init);
-
-        function isCollision(x, y) {
-            if (x < 0 || x >= tileCount || y < 0 || y >= tileCount) return true;
-            return snake.some(p => p.x === x && p.y === y);
-        }
-
-        function countFreeSpace(startX, startY) {
-            let visited = new Set();
-            let queue = [{x: startX, y: startY}];
-            let count = 0;
-            const maxCheck = 200; 
-
-            while(queue.length > 0 && count < maxCheck) {
-                let curr = queue.shift();
-                let key = `${curr.x},${curr.y}`;
-                if (isCollision(curr.x, curr.y) || visited.has(key)) continue;
-                if (bombs.some(b => b.x === curr.x && b.y === curr.y)) continue;
-
-                visited.add(key);
-                count++;
-                queue.push({x: curr.x+1, y: curr.y}, {x: curr.x-1, y: curr.y}, {x: curr.x, y: curr.y+1}, {x: curr.x, y: curr.y-1});
-            }
-            return count;
-        }
-
-        function getSmartMove() {
-            const head = snake[0];
-            const choices = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
-
-            if (foods.length === 0) return choices[0];
-
-            let targetFood = foods[0];
-            let minDist = Infinity;
-            foods.forEach(f => {
-                let d = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
-                if (d < minDist) { minDist = d; targetFood = f; }
-            });
-
-            const evaluatedMoves = choices.map(move => {
-                const nx = head.x + move.x;
-                const ny = head.y + move.y;
-                
-                if (isCollision(nx, ny) || bombs.some(b => b.x === nx && b.y === ny)) return { move, valid: false };
-
-                const dist = Math.abs(nx - targetFood.x) + Math.abs(ny - targetFood.y);
-                const space = countFreeSpace(nx, ny);
-                return { move, dist, space, valid: true };
-            }).filter(m => m.valid);
-
-            evaluatedMoves.sort((a, b) => {
-                if (a.space < snake.length || b.space < snake.length) return b.space - a.space;
-                return a.dist - b.dist;
-            });
-
-            return evaluatedMoves.length > 0 ? evaluatedMoves[0].move : lastMove;
-        }
-
-        function draw() {
-            if (!gameActive) return;
-
-            // Clear Background
-            ctx.fillStyle = "#0f172a";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.font = `${gridSize * 0.7}px serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-
-            foods.forEach(f => ctx.fillText(f.type, f.x * gridSize + gridSize/2, f.y * gridSize + gridSize/2));
-            bombs.forEach(b => ctx.fillText(b.type, b.x * gridSize + gridSize/2, b.y * gridSize + gridSize/2));
-
-            if (snake.length > 0) {
-                ctx.lineCap = "round";
-                ctx.lineJoin = "round";
-                ctx.strokeStyle = "#22c55e";
-                ctx.lineWidth = gridSize - 4;
-                ctx.beginPath();
-                ctx.moveTo(snake[0].x * gridSize + gridSize/2, snake[0].y * gridSize + gridSize/2);
-                for(let i = 1; i < snake.length; i++) {
-                    ctx.lineTo(snake[i].x * gridSize + gridSize/2, snake[i].y * gridSize + gridSize/2);
-                }
-                ctx.stroke();
-
-                const h = snake[0];
-                ctx.fillStyle = "#4ade80";
-                ctx.beginPath();
-                ctx.arc(h.x * gridSize + gridSize/2, h.y * gridSize + gridSize/2, gridSize/2 * 0.8, 0, Math.PI*2);
-                ctx.fill();
-            }
-
-            const move = getSmartMove();
-            lastMove = move;
-            const newHead = {x: snake[0].x + move.x, y: snake[0].y + move.y};
-
-            if (bombs.some(b => b.x === newHead.x && b.y === newHead.y) || isCollision(newHead.x, newHead.y)) {
-                init(); 
-            } 
-            else {
-                snake.unshift(newHead);
-                let foodIndex = foods.findIndex(f => f.x === newHead.x && f.y === newHead.y);
-                if (foodIndex !== -1) {
-                    foods.splice(foodIndex, 1);
-                    score += 10;
-                    scoreVal.innerText = score;
-                    if (score >= 10000) { gameActive = false; winScreen.style.display = "flex"; }
-                    if (foods.length === 0) spawnItems('food', 1);
-                } else {
-                    snake.pop();
-                }
-            }
-
-            setTimeout(() => requestAnimationFrame(draw), 50);
-        }
-
-        init();
-        draw();
-    </script>
 </body>
 </html>
