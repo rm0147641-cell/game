@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Snake ULTRA AI</title>
+<title>Snake GOD AI</title>
 <style>
 body{
     margin:0;
@@ -24,19 +24,36 @@ canvas{background:#0f172a;border:2px solid #1e293b;}
 <canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
-const scoreEl = document.getElementById("score");
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+const scoreEl=document.getElementById("score");
 
-let grid = 30, size;
-let snake, foods, bombs, dir, score;
+let grid=30,size;
+let snake,foods,bombs,score;
+let path=[]; // hamilton path index
+let indexMap={};
 
+// 🔊 SOUND
 function beep(f=400,t=100){
-    let a=new (window.AudioContext||window.webkitAudioContext)();
-    let o=a.createOscillator(),g=a.createGain();
-    o.connect(g);g.connect(a.destination);
-    o.frequency.value=f;o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+t/1000);
+ let a=new (window.AudioContext||window.webkitAudioContext)();
+ let o=a.createOscillator(),g=a.createGain();
+ o.connect(g);g.connect(a.destination);
+ o.frequency.value=f;o.start();
+ g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+t/1000);
+}
+
+// 🧠 BUAT HAMILTONIAN PATH (snake loop aman)
+function buildPath(){
+    path=[];
+    for(let y=0;y<grid;y++){
+        if(y%2===0){
+            for(let x=0;x<grid;x++) path.push({x,y});
+        }else{
+            for(let x=grid-1;x>=0;x--) path.push({x,y});
+        }
+    }
+    indexMap={};
+    path.forEach((p,i)=>indexMap[p.x+","+p.y]=i);
 }
 
 function init(){
@@ -44,15 +61,16 @@ function init(){
     canvas.width=size;
     canvas.height=size;
 
-    snake=[{x:5,y:15}];
+    snake=[{x:0,y:0}];
     foods=[];
     bombs=[];
-    dir={x:1,y:0};
     score=0;
 
+    buildPath();
     spawn('food',1,false);
 }
 
+// spawn item
 function spawn(type,n,temp){
     for(let i=0;i<n;i++){
         let tries=0;
@@ -76,162 +94,147 @@ function spawn(type,n,temp){
     }
 }
 
+// ⌨️ KEYBOARD
 window.addEventListener("keydown",e=>{
-    let k=e.key.toUpperCase();
-    if(k==='A')spawn('food',5,true);
-    if(k==='S')spawn('food',10,true);
-    if(k==='D')spawn('food',20,true);
-    if(k==='Q')spawn('bomb',5,true);
-    if(k==='W')spawn('bomb',10,true);
-    if(k==='E')spawn('bomb',20,true);
+ let k=e.key.toUpperCase();
+ if(k==='A')spawn('food',5,true);
+ if(k==='S')spawn('food',10,true);
+ if(k==='D')spawn('food',20,true);
+ if(k==='Q')spawn('bomb',5,true);
+ if(k==='W')spawn('bomb',10,true);
+ if(k==='E')spawn('bomb',20,true);
+ if(k==='R')init(); // ✅ RESET
 });
 
 function collision(x,y){
-    if(x<0||y<0||x>=grid||y>=grid) return true;
-    return snake.some(s=>s.x===x&&s.y===y);
+ if(x<0||y<0||x>=grid||y>=grid) return true;
+ return snake.some(s=>s.x===x&&s.y===y);
 }
 
-// 🧠 FLOOD FILL CEK RUANG AMAN
-function floodFill(x,y,limit=200){
-    let visited=new Set();
-    let stack=[[x,y]];
-    let count=0;
-
-    while(stack.length && count<limit){
-        let [cx,cy]=stack.pop();
-        let key=cx+','+cy;
-        if(visited.has(key))continue;
-        visited.add(key);
-        count++;
-
-        [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
-            let nx=cx+d[0], ny=cy+d[1];
-            if(nx>=0&&ny>=0&&nx<grid&&ny<grid){
-                if(!collision(nx,ny)){
-                    stack.push([nx,ny]);
-                }
-            }
-        });
-    }
-    return count;
-}
-
-// 🧠 ULTRA AI
-function bestMove(){
+// 🧠 AI PERFECT
+function nextMove(){
     let head=snake[0];
-    let dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    let headIndex=indexMap[head.x+","+head.y];
 
-    let moves=[];
+    // default: ikut jalur aman
+    let nextIndex=(headIndex+1)%path.length;
+    let target=path[nextIndex];
 
-    dirs.forEach(d=>{
-        let nx=head.x+d[0];
-        let ny=head.y+d[1];
+    // 🧬 LEARNING: kalau buah dekat & aman → ambil shortcut
+    let bestFood=null;
+    let bestDist=999;
 
-        if(collision(nx,ny)) return;
-
-        let bomb=bombs.some(b=>b.x===nx&&b.y===ny)?1000:0;
-
-        let dist=9999;
-        foods.forEach(f=>{
-            let dd=Math.abs(nx-f.x)+Math.abs(ny-f.y);
-            if(dd<dist)dist=dd;
-        });
-
-        let space=floodFill(nx,ny);
-
-        moves.push({
-            d:{x:d[0],y:d[1]},
-            score:dist + bomb - space
-        });
+    foods.forEach(f=>{
+        let d=Math.abs(head.x-f.x)+Math.abs(head.y-f.y);
+        if(d<bestDist) {
+            bestDist=d;
+            bestFood=f;
+        }
     });
 
-    moves.sort((a,b)=>a.score-b.score);
+    if(bestFood){
+        let dx=Math.sign(bestFood.x-head.x);
+        let dy=Math.sign(bestFood.y-head.y);
 
-    return moves.length?moves[0].d:dir;
+        let tryMove={x:head.x+dx,y:head.y+dy};
+
+        let safe=!collision(tryMove.x,tryMove.y)
+        && !bombs.some(b=>b.x===tryMove.x&&b.y===tryMove.y);
+
+        if(safe){
+            return {x:dx,y:dy};
+        }
+    }
+
+    // fallback ke path aman
+    return {
+        x:target.x-head.x,
+        y:target.y-head.y
+    };
 }
 
 function draw(){
-    let now=Date.now();
+ let now=Date.now();
 
-    foods=foods.filter(f=>!f.temp||now-f.time<15000);
-    bombs=bombs.filter(b=>!b.temp||now-b.time<15000);
+ foods=foods.filter(f=>!f.temp||now-f.time<15000);
+ bombs=bombs.filter(b=>!b.temp||now-b.time<15000);
 
-    ctx.fillStyle="#0f172a";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle="#0f172a";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    let g=canvas.width/grid;
+ let g=canvas.width/grid;
 
-    ctx.font=g*0.7+"px serif";
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
+ ctx.font=g*0.7+"px serif";
+ ctx.textAlign="center";
+ ctx.textBaseline="middle";
 
-    foods.forEach(f=>{
-        let age=now-f.time;
-        if(f.temp && age>12000){
-            if(Math.floor(age/200)%2===0)return;
-        }
-        ctx.fillText("🍎",f.x*g+g/2,f.y*g+g/2);
-    });
-
-    bombs.forEach(b=>{
-        let age=now-b.time;
-        if(b.temp && age>12000){
-            if(Math.floor(age/200)%2===0)return;
-        }
-        ctx.fillText("💣",b.x*g+g/2,b.y*g+g/2);
-    });
-
-    ctx.strokeStyle="#22c55e";
-    ctx.lineWidth=g-4;
-    ctx.beginPath();
-    ctx.moveTo(snake[0].x*g+g/2,snake[0].y*g+g/2);
-    for(let i=1;i<snake.length;i++){
-        ctx.lineTo(snake[i].x*g+g/2,snake[i].y*g+g/2);
+ foods.forEach(f=>{
+    let age=now-f.time;
+    if(f.temp && age>12000){
+        if(Math.floor(age/200)%2===0)return;
     }
-    ctx.stroke();
+    ctx.fillText("🍎",f.x*g+g/2,f.y*g+g/2);
+ });
 
-    let h=snake[0];
-    ctx.fillStyle="#4ade80";
-    ctx.beginPath();
-    ctx.arc(h.x*g+g/2,h.y*g+g/2,g/2*0.8,0,Math.PI*2);
-    ctx.fill();
-
-    let m=bestMove();
-    dir=m;
-
-    let nx=h.x+dir.x;
-    let ny=h.y+dir.y;
-
-    if(collision(nx,ny)){
-        beep(100,200);
-        init();
-        return;
+ bombs.forEach(b=>{
+    let age=now-b.time;
+    if(b.temp && age>12000){
+        if(Math.floor(age/200)%2===0)return;
     }
+    ctx.fillText("💣",b.x*g+g/2,b.y*g+g/2);
+ });
 
-    snake.unshift({x:nx,y:ny});
+ // snake
+ ctx.strokeStyle="#22c55e";
+ ctx.lineWidth=g-4;
+ ctx.beginPath();
+ ctx.moveTo(snake[0].x*g+g/2,snake[0].y*g+g/2);
+ for(let i=1;i<snake.length;i++){
+    ctx.lineTo(snake[i].x*g+g/2,snake[i].y*g+g/2);
+ }
+ ctx.stroke();
 
-    let bi=bombs.findIndex(b=>b.x===nx&&b.y===ny);
-    if(bi!=-1){
-        bombs.splice(bi,1);
-        score-=50;
-        if(score<0)score=0;
-        beep(150,150);
-    }
+ let h=snake[0];
+ ctx.fillStyle="#4ade80";
+ ctx.beginPath();
+ ctx.arc(h.x*g+g/2,h.y*g+g/2,g/2*0.8,0,Math.PI*2);
+ ctx.fill();
 
-    let fi=foods.findIndex(f=>f.x===nx&&f.y===ny);
-    if(fi!=-1){
-        foods.splice(fi,1);
-        score+=10;
-        beep(600,100);
-    }else{
-        snake.pop();
-    }
+ let move=nextMove();
 
-    if(foods.length===0) spawn('food',1,false);
+ let nx=h.x+move.x;
+ let ny=h.y+move.y;
 
-    scoreEl.innerText=score;
+ if(collision(nx,ny)){
+    beep(100,200);
+    init();
+    return;
+ }
 
-    setTimeout(()=>requestAnimationFrame(draw),50);
+ snake.unshift({x:nx,y:ny});
+
+ let bi=bombs.findIndex(b=>b.x===nx&&b.y===ny);
+ if(bi!=-1){
+    bombs.splice(bi,1);
+    score-=50;
+    if(score<0)score=0;
+    beep(150,150);
+ }
+
+ let fi=foods.findIndex(f=>f.x===nx&&f.y===ny);
+ if(fi!=-1){
+    foods.splice(fi,1);
+    score+=10;
+    beep(600,100);
+ }else{
+    snake.pop();
+ }
+
+ if(foods.length===0) spawn('food',1,false);
+
+ scoreEl.innerText=score;
+
+ setTimeout(()=>requestAnimationFrame(draw),40);
 }
 
 init();
